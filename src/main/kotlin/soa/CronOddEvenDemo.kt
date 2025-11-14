@@ -44,22 +44,32 @@ class IntegrationApplication(
     fun integerSource(): AtomicInteger = AtomicInteger()
 
     /**
-     * Defines a publish-subscribe channel for even numbers.
+     * Defines a publish-subscribe channel for odd numbers.
      * Multiple subscribers can receive messages from this channel.
      */
     @Bean
-    fun evenChannel(): PublishSubscribeChannelSpec<*> = MessageChannels.publishSubscribe()
+    fun oddChannel(): PublishSubscribeChannelSpec<*> = MessageChannels.publishSubscribe()
 
     /**
      * Main integration flow that polls the integer source and routes messages.
      * Polls every 100ms and routes based on even/odd logic.
      */
     @Bean
-    fun myFlow(integerSource: AtomicInteger): IntegrationFlow =
+    fun sourceFlow(integerSource: AtomicInteger): IntegrationFlow =
         integrationFlow(
             source = { integerSource.getAndIncrement() },
             options = { poller(Pollers.fixedRate(100)) },
         ) {
+            channel("numberChannel")
+        }
+
+    /**
+     * Main integration flow that polls the integer source and routes messages.
+     * Polls every 100ms and routes based on even/odd logic.
+     */
+    @Bean
+    fun myFlow(): IntegrationFlow =
+        integrationFlow("numberChannel") {
             transform { num: Int ->
                 logger.info("📥 Source generated number: {}", num)
                 num
@@ -95,11 +105,6 @@ class IntegrationApplication(
     @Bean
     fun oddFlow(): IntegrationFlow =
         integrationFlow("oddChannel") {
-            filter { p: Int ->
-                val passes = p % 2 == 0
-                logger.info("  🔍 Odd Filter: checking {} → {}", p, if (passes) "PASS" else "REJECT")
-                passes
-            } // , { discardChannel("discardChannel") })
             transform { obj: Int ->
                 logger.info("  ⚙️  Odd Transformer: {} → 'Number {}'", obj, obj)
                 "Number $obj"
@@ -150,7 +155,7 @@ class SomeService {
  */
 @MessagingGateway
 interface SendNumber {
-    @Gateway(requestChannel = "evenChannel")
+    @Gateway(requestChannel = "numberChannel")
     fun sendNumber(number: Int)
 }
 
